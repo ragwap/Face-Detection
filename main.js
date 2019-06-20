@@ -48,7 +48,9 @@ function loadLabeledImages() {
     "Cyclops",
     "Jean Grey",
     "Magneto",
+    "Quicksilver",
     "Raven",
+    "Storm",
     "Vuk"
   ];
   return Promise.all(
