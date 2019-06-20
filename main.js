@@ -1,4 +1,4 @@
-const getImage = document.getElementById("uploadImage");
+const imageUpload = document.getElementById("uploadImage");
 
 Promise.all([
   faceapi.nets.faceRecognitionNet.loadFromUri("/models"),
@@ -6,28 +6,36 @@ Promise.all([
   faceapi.nets.ssdMobilenetv1.loadFromUri("/models")
 ]).then(start);
 
-function start() {
+async function start() {
   const container = document.createElement("div");
   container.style.position = "relative";
   document.body.append(container);
+  const labeledFaceDescriptors = await loadLabeledImages();
+  const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
+  let image;
+  let canvas;
   document.body.append("Loaded");
-  getImage.addEventListener("change", async () => {
-    const imageFile = await faceapi.bufferToImage(getImage.files[0]);
-    container.append(imageFile);
-    const canvas = faceapi.createCanvasFromMedia(imageFile);
+  imageUpload.addEventListener("change", async () => {
+    if (image) image.remove();
+    if (canvas) canvas.remove();
+    image = await faceapi.bufferToImage(imageUpload.files[0]);
+    container.append(image);
+    canvas = faceapi.createCanvasFromMedia(image);
     container.append(canvas);
-    const displaySize = { width: imageFile.width, height: imageFile.height };
+    const displaySize = { width: image.width, height: image.height };
     faceapi.matchDimensions(canvas, displaySize);
     const detections = await faceapi
-      .detectAllFaces(imageFile)
+      .detectAllFaces(image)
       .withFaceLandmarks()
       .withFaceDescriptors();
-
     const resizedDetections = faceapi.resizeResults(detections, displaySize);
-    resizedDetections.forEach(detection => {
-      const box = detection.detection.box;
+    const results = resizedDetections.map(d =>
+      faceMatcher.findBestMatch(d.descriptor)
+    );
+    results.forEach((result, i) => {
+      const box = resizedDetections[i].detection.box;
       const drawBox = new faceapi.draw.DrawBox(box, {
-        label: "Face"
+        label: result.toString()
       });
       drawBox.draw(canvas);
     });
@@ -36,11 +44,28 @@ function start() {
 
 function loadLabeledImages() {
   const labels = [
-    "Jean Grey",
     "Charles Xavier",
     "Cyclops",
-    "Raven",
+    "Jean Grey",
     "Magneto",
+    "Raven",
     "Vuk"
   ];
+  return Promise.all(
+    labels.map(async label => {
+      const descriptions = [];
+      for (let i = 1; i <= 2; i++) {
+        const img = await faceapi.fetchImage(
+          `https://raw.githubusercontent.com/navinduJay/Face-Detection/master/labeled_images/${label}/${i}.jpg`
+        );
+        const detections = await faceapi
+          .detectSingleFace(img)
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+        descriptions.push(detections.descriptor);
+      }
+
+      return new faceapi.LabeledFaceDescriptors(label, descriptions);
+    })
+  );
 }
